@@ -75,16 +75,7 @@ public struct Scanner: Sendable {
     public func plan() -> ScanPlan {
         var plan = ScanPlan()
         for entry in CacheCatalog.entries where !settings.disabledEntries.contains(entry.id) {
-            var locations: [(url: URL, configFile: URL?, markers: [String])] =
-                entry.resolvedLocations(home: home).map { ($0.standardizedFileURL, nil, []) }
-            for configured in configuredLocations where configured.entryID == entry.id {
-                let url = configured.url.standardizedFileURL
-                if !locations.contains(where: { $0.url == url }) {
-                    locations.append((url, configured.configFile, configured.markers))
-                }
-            }
-
-            for location in locations {
+            for location in locations(of: entry) {
                 if let rejection = policy.check(location: location.url, markers: location.markers) {
                     // カタログの既定の場所がないのはふつうなので記録しない
                     if rejection != .notFound || location.configFile != nil {
@@ -116,6 +107,26 @@ public struct Scanner: Sendable {
             }
         }
         return plan
+    }
+
+    /// カタログの場所のうち、今の時点で走査・削除してよいもの（オフにした種類も含む）。`SafeFileOps` が許可範囲に使う
+    public func allowedLocations() -> [URL] {
+        CacheCatalog.entries.flatMap(locations(of:)).compactMap { location in
+            policy.check(location: location.url, markers: location.markers) == nil ? location.url : nil
+        }
+    }
+
+    /// 既定の場所と、設定ファイルで指定された場所
+    private func locations(of entry: CacheCatalogEntry) -> [(url: URL, configFile: URL?, markers: [String])] {
+        var locations: [(url: URL, configFile: URL?, markers: [String])] =
+            entry.resolvedLocations(home: home).map { ($0.standardizedFileURL, nil, []) }
+        for configured in configuredLocations where configured.entryID == entry.id {
+            let url = configured.url.standardizedFileURL
+            if !locations.contains(where: { $0.url == url }) {
+                locations.append((url, configured.configFile, configured.markers))
+            }
+        }
+        return locations
     }
 
     /// 単位の中身を数える。複数の場所は別々に数えて足す

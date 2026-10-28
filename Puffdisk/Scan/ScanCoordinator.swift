@@ -30,7 +30,8 @@ final class ScanCoordinator {
 
     /// - Parameter userInitiated: 再スキャンボタンから。少し高い優先度で測る
     func scan(userInitiated: Bool) {
-        guard task == nil else { return }
+        // 削除待ちへ移している間は計画し直さない（移したものが一覧に戻らないように）
+        guard task == nil, state.purgeStatus != .moving else { return }
         let priority: TaskPriority = userInitiated ? .utility : .background
         let home = home
         let settings = state.settings

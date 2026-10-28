@@ -52,22 +52,10 @@ final class SizeCacheRecord {
 @MainActor
 final class SizeCacheStore {
     private static let logger = Logger(subsystem: "com.towaos.puffdisk", category: "SizeCache")
-    /// コンテキストはコンテナを保持しないので、ここで持っておく
-    private let container: ModelContainer
-    private var context: ModelContext { container.mainContext }
+    private let context: ModelContext
 
-    /// `~/Library/Application Support/Puffdisk/Puffdisk.store`（DESIGN.md D15）。開けなければメモリ上だけで動かす
-    init() {
-        do {
-            let folder = URL.applicationSupportDirectory.appending(path: "Puffdisk", directoryHint: .isDirectory)
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true,
-                                                    attributes: [.posixPermissions: 0o700])
-            container = try ModelContainer(for: SizeCacheRecord.self,
-                                           configurations: ModelConfiguration(url: folder.appending(path: "Puffdisk.store")))
-        } catch {
-            Self.logger.error("サイズのキャッシュを開けない: \(error.localizedDescription, privacy: .public)")
-            container = try! ModelContainer(for: SizeCacheRecord.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
-        }
+    init(persistence: Persistence) {
+        context = persistence.context
     }
 
     func records(for ids: [String]) -> [String: SizeCacheRecord] {

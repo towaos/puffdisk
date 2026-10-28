@@ -9,13 +9,13 @@ final class StatusItemController: NSObject {
     private let popover = NSPopover()
     private let state: AppState
 
-    init(state: AppState, rescan: @escaping () -> Void) {
+    init(state: AppState, actions: PopoverActions) {
         self.state = state
         super.init()
 
         popover.behavior = .transient
         popover.contentSize = NSSize(width: 360, height: 520)
-        popover.contentViewController = NSHostingController(rootView: PopoverView(state: state, rescan: rescan))
+        popover.contentViewController = NSHostingController(rootView: PopoverView(state: state, actions: actions))
 
         if let button = statusItem.button {
             button.target = self
@@ -25,9 +25,15 @@ final class StatusItemController: NSObject {
         render()
         observeStage()
         #if DEBUG
-        // 画面確認用: `open Puffdisk.app --args -SnapshotPopover <PNG のパス>`。スキャンを待ってから書き出す
+        // 画面確認用: `open Puffdisk.app --args -SnapshotPopover <PNG のパス> [-SnapshotConfirmation YES]`。
+        // スキャンを待ってから書き出す
         if let path = UserDefaults.standard.string(forKey: "SnapshotPopover") {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 12) { self.snapshotPopover(to: URL(filePath: path)) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 12) {
+                if UserDefaults.standard.bool(forKey: "SnapshotConfirmation") {
+                    state.confirmingPurge = state.selectedCandidates(in: .cache)
+                }
+                DispatchQueue.main.async { self.snapshotPopover(to: URL(filePath: path)) }
+            }
         }
         #endif
     }

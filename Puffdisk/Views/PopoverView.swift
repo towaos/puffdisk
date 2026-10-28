@@ -2,16 +2,27 @@ import AppKit
 import PuffdiskCore
 import SwiftUI
 
+/// ポップオーバーからの操作
+struct PopoverActions {
+    var rescan: () -> Void
+    var purge: ([Candidate]) -> Void
+    var keep: (Candidate) -> Void
+    var unkeep: (String) -> Void
+}
+
 /// ポップオーバー（DESIGN.md 6.1）
 struct PopoverView: View {
     let state: AppState
-    let rescan: () -> Void
+    let actions: PopoverActions
     @State private var category = CandidateCategory.cache
     @State private var showsDebug = false
 
     var body: some View {
         VStack(spacing: 0) {
             header
+            if let notice = state.notice {
+                NoticeBar(text: notice) { state.notice = nil }
+            }
             Divider()
             #if DEBUG
             if showsDebug {
@@ -26,7 +37,19 @@ struct PopoverView: View {
             footer
         }
         .frame(width: 360, height: 520)
+        .overlay {
+            if let confirming = state.confirmingPurge {
+                PurgeConfirmation(candidates: confirming) {
+                    state.confirmingPurge = nil
+                } onConfirm: {
+                    state.confirmingPurge = nil
+                    actions.purge(confirming)
+                }
+            }
+        }
     }
+
+    private var selectedCandidates: [Candidate] { state.selectedCandidates(in: category) }
 
     // MARK: - 上部
 
@@ -65,12 +88,15 @@ struct PopoverView: View {
                 } else {
                     Text("最終スキャン —")
                 }
-                Button(action: rescan) {
+                Button(action: actions.rescan) {
                     Image(systemName: "arrow.clockwise")
                 }
                 .buttonStyle(.borderless)
                 .help("再スキャン")
                 .accessibilityLabel("再スキャン")
+            }
+            if state.purgeStatus == .deleting {
+                Text("・削除中…")
             }
         }
         .font(.caption)
@@ -93,7 +119,7 @@ struct PopoverView: View {
                 .labelsHidden()
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                CandidateList(state: state, category: category)
+                CandidateList(state: state, category: category, keep: actions.keep)
             }
         }
     }
@@ -126,13 +152,20 @@ struct PopoverView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
-            // 削除は M2、隔離は M3
-            Button(category == .cache ? "選択した \(Formatting.bytes(state.selectedBytes(in: category))) を削除"
-                                      : "選択した \(Formatting.bytes(state.selectedBytes(in: category))) を隔離") {}
-                .disabled(true)
+            let selectedBytes = Formatting.bytes(state.selectedBytes(in: category))
+            if category == .cache {
+                Button("選択した \(selectedBytes) を削除") { state.confirmingPurge = selectedCandidates }
+                    .disabled(selectedCandidates.isEmpty || state.scanStatus != .idle || state.purgeStatus == .moving)
+                    .help(state.scanStatus != .idle ? "スキャンが終わると削除できます" : "")
+            } else {
+                // 隔離は M3
+                Button("選択した \(selectedBytes) を隔離") {}
+                    .disabled(true)
+            }
             Menu {
-                Button("再スキャン", action: rescan)
+                Button("再スキャン", action: actions.rescan)
                     .disabled(state.scanStatus != .idle)
+                keptMenu
                 Button("設定…") {}
                     .disabled(true)
                 #if DEBUG
@@ -149,6 +182,48 @@ struct PopoverView: View {
             .accessibilityLabel("メニュー")
         }
         .padding(12)
+    }
+}
+
+extension PopoverView {
+    /// 「残す」にしたもの。設定画面（M5）ができるまではここから戻す
+    @ViewBuilder
+    private var keptMenu: some View {
+        if state.keptItems.isEmpty {
+            Button("残したもの（なし）") {}
+                .disabled(true)
+        } else {
+            Menu("残したもの（\(state.keptItems.count)件）") {
+                Section("選ぶと候補に戻します") {
+                    ForEach(state.keptItems) { item in
+                        Button(item.title) { actions.unkeep(item.id) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct NoticeBar: View {
+    let text: String
+    let dismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "info.circle")
+            Text(text)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Button(action: dismiss) {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("閉じる")
+        }
+        .font(.caption)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.quaternary.opacity(0.5))
     }
 }
 

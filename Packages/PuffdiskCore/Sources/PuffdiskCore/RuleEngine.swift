@@ -59,7 +59,7 @@ public struct Candidate: Identifiable, Hashable, Sendable {
     public let entryID: String
     public let group: String
     public let title: String
-    /// 場所の表示（`~/` 始まり）
+    /// 場所の表示（`~/` 始まり）。DerivedData のプロジェクトは元プロジェクトの場所（「元: 」付き）
     public let detail: String
     public let paths: [URL]
     public let reclaimableBytes: Int64
@@ -119,10 +119,10 @@ public enum RuleEngine {
             if let built { lastUsed = .init(date: built, kind: project.lastBuild == nil ? .modified : .built) }
             switch project.workspace {
             case let .missing(workspace):
-                detail = displayPath(workspace, home: home)
+                detail = "元: " + displayPath(workspace, home: home)
                 reasons = [.workspaceMissing, .refetchable(entry.reason)]
             case let .exists(workspace), let .unverifiable(workspace?):
-                detail = displayPath(workspace, home: home)
+                detail = "元: " + displayPath(workspace, home: home)
                 fallthrough
             case .unverifiable(nil):
                 guard let built else { return nil }

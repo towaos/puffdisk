@@ -84,7 +84,7 @@ struct RuleEngineTests {
             unit("derived-data", "Library/Developer/Xcode/DerivedData/App-x", project(.missing(workspace), builtDaysAgo: 8)),
             stats(50 * mb, daysAgo: 8)))
         #expect(found.reasons.first == .workspaceMissing)
-        #expect(found.detail == "~/Developer/Gone/Gone.xcodeproj")
+        #expect(found.detail == "元: ~/Developer/Gone/Gone.xcodeproj")
         #expect(found.lastUsed?.kind == .built)
 
         // 直近に更新されたものは、元プロジェクトがなくても候補にしない

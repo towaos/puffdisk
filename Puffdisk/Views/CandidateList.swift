@@ -6,6 +6,7 @@ import SwiftUI
 struct CandidateList: View {
     let state: AppState
     let category: CandidateCategory
+    let keep: (Candidate) -> Void
     @State private var collapsed: Set<String> = []
 
     private var groups: [(name: String, candidates: [Candidate])] {
@@ -34,7 +35,7 @@ struct CandidateList: View {
                         groupHeader(group.name, total: group.candidates.reduce(0) { $0 + $1.reclaimableBytes })
                         if !collapsed.contains(group.name) {
                             ForEach(group.candidates) { candidate in
-                                CandidateRow(candidate: candidate, isSelected: binding(for: candidate))
+                                CandidateRow(candidate: candidate, isSelected: binding(for: candidate)) { keep(candidate) }
                             }
                         }
                     }
@@ -83,6 +84,7 @@ struct CandidateList: View {
 private struct CandidateRow: View {
     let candidate: Candidate
     @Binding var isSelected: Bool
+    let keep: () -> Void
     @State private var isHovering = false
 
     var body: some View {
@@ -104,6 +106,12 @@ private struct CandidateRow: View {
                         .buttonStyle(.borderless)
                         .help("Finder で表示")
                         .accessibilityLabel("Finder で表示")
+                        Button(action: keep) {
+                            Image(systemName: "pin")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("残す（以後候補にしない）")
+                        .accessibilityLabel("残す")
                     }
                     Text(Formatting.bytes(candidate.reclaimableBytes))
                         .monospacedDigit()
@@ -130,6 +138,7 @@ private struct CandidateRow: View {
         .onHover { isHovering = $0 }
         .contextMenu {
             Button("Finder で表示", action: reveal)
+            Button("残す（以後候補にしない）", action: keep)
         }
     }
 
