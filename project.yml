@@ -1,0 +1,41 @@
+name: Puffdisk
+options:
+  bundleIdPrefix: com.towaos
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+packages:
+  PuffdiskCore:
+    path: Packages/PuffdiskCore
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+targets:
+  Puffdisk:
+    type: application
+    platform: macOS
+    sources:
+      - Puffdisk
+    dependencies:
+      - package: PuffdiskCore
+        product: PuffdiskCore
+    info:
+      path: Puffdisk/Info.plist
+      properties:
+        CFBundleDisplayName: Puffdisk
+        CFBundleShortVersionString: "0.0.1"
+        CFBundleVersion: "1"
+        LSMinimumSystemVersion: "$(MACOSX_DEPLOYMENT_TARGET)"
+        LSUIElement: true
+        NSHumanReadableCopyright: "© 2026 towaos"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.towaos.puffdisk
+        PRODUCT_NAME: Puffdisk
+        # DESIGN.md 9.2: サンドボックスなし、Hardened Runtime あり。M0 はローカル署名
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: ""
