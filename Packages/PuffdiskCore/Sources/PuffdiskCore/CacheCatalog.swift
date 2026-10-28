@@ -11,14 +11,14 @@ public struct CacheCatalogEntry: Identifiable, Sendable {
     public enum Unit: Equatable, Sendable {
         /// 場所全体を1つの候補にする
         case whole
-        /// サブフォルダを1つずつ候補にする
+        /// サブフォルダを1つずつ候補にする（直下のファイルと `.` で始まるフォルダは対象にしない）
         case perChild
+        /// Xcode DerivedData。プロジェクトごとと、共有キャッシュをまとめた1つ（DESIGN.md 7.3）
+        case derivedData
     }
 
     /// 「〜ごと」の単位の日数の基準（DESIGN.md 7.6）
     public enum AgeRule: Equatable, Sendable {
-        /// DerivedData の未ビルド日数（7.3）
-        case derivedDataBuild
         /// DeviceSupport・JetBrains の未更新日数
         case staleToolData
     }
@@ -83,6 +83,8 @@ public struct CacheCatalogEntry: Identifiable, Sendable {
 /// アプリに組み込むキャッシュの一覧（DESIGN.md 7.2）。パスは macOS での既定値
 public enum CacheCatalog {
     static let gigabyte: Int64 = 1_000_000_000
+    /// 日数で判定する「〜ごと」の単位の下限。これより小さいものは一覧に並べても意味がない
+    static let megabyte: Int64 = 1_000_000
 
     public static let entries: [CacheCatalogEntry] = [
         .init(id: "npm", name: "npm", group: "パッケージ", paths: [".npm/_cacache"],
@@ -124,15 +126,15 @@ public enum CacheCatalog {
               selectedByDefault: false,
               reason: "再ダウンロードに時間がかかる"),
         .init(id: "derived-data", name: "Xcode DerivedData", group: "Xcode", paths: ["Library/Developer/Xcode/DerivedData"],
-              unit: .perChild, minimumBytes: 0, ageRule: .derivedDataBuild,
+              unit: .derivedData, minimumBytes: megabyte,
               reason: "次回ビルドで作り直される"),
         .init(id: "device-support", name: "Xcode DeviceSupport", group: "Xcode", paths: ["Library/Developer/Xcode/*DeviceSupport"],
-              unit: .perChild, minimumBytes: 0, ageRule: .staleToolData,
+              unit: .perChild, minimumBytes: megabyte, ageRule: .staleToolData,
               reason: "実機を接続すると作り直される"),
         .init(id: "simulator-caches", name: "Simulator キャッシュ", group: "Xcode", paths: ["Library/Developer/CoreSimulator/Caches"],
               reason: "必要に応じて作り直される"),
         .init(id: "jetbrains", name: "JetBrains", group: "IDE", paths: ["Library/Caches/JetBrains"],
-              unit: .perChild, minimumBytes: 0, ageRule: .staleToolData,
+              unit: .perChild, minimumBytes: megabyte, ageRule: .staleToolData,
               reason: "古いバージョンの IDE のキャッシュ"),
     ]
 

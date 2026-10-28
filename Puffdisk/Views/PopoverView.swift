@@ -1,26 +1,34 @@
 import AppKit
+import PuffdiskCore
 import SwiftUI
 
-/// ポップオーバーの枠（DESIGN.md 6.1）。候補一覧は M1
+/// ポップオーバー（DESIGN.md 6.1）
 struct PopoverView: View {
     let state: AppState
+    let rescan: () -> Void
+    @State private var category = CandidateCategory.cache
+    @State private var showsDebug = false
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
             #if DEBUG
-            DebugPanel(state: state)
+            if showsDebug {
+                DebugPanel(state: state)
+            } else {
+                content
+            }
             #else
-            Text("候補一覧（M1）")
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            content
             #endif
             Divider()
             footer
         }
         .frame(width: 360, height: 520)
     }
+
+    // MARK: - 上部
 
     private var header: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -30,16 +38,87 @@ struct PopoverView: View {
                 .frame(width: 70, height: 56)
                 .accessibilityLabel("段階 \(state.stage.rawValue)")
             VStack(alignment: .leading, spacing: 6) {
-                Text("消せそうな量 —")
+                Text("消せそうな量 \(Formatting.bytes(state.reclaimableBytes))")
                     .font(.headline)
+                    .help(Formatting.estimateNote)
                 DiskUsageBar()
-                Text("最終スキャン —")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                scanLine
             }
         }
         .padding(14)
     }
+
+    private var scanLine: some View {
+        HStack(spacing: 6) {
+            switch state.scanStatus {
+            case let .scanning(done, total):
+                ProgressView(value: Double(done), total: Double(max(total, 1)))
+                    .progressViewStyle(.linear)
+                    .frame(width: 80)
+                Text("スキャン中 \(done)/\(total)")
+            case .idle:
+                if let lastScan = state.lastScan {
+                    TimelineView(.periodic(from: .now, by: 60)) { context in
+                        Text("最終スキャン \(Formatting.relative(lastScan))")
+                            .id(context.date)
+                    }
+                } else {
+                    Text("最終スキャン —")
+                }
+                Button(action: rescan) {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .help("再スキャン")
+                .accessibilityLabel("再スキャン")
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+
+    // MARK: - 一覧
+
+    @ViewBuilder
+    private var content: some View {
+        if state.candidates.isEmpty {
+            emptyState
+        } else {
+            VStack(spacing: 0) {
+                Picker("", selection: $category) {
+                    Text("キャッシュ \(Formatting.bytes(state.total(of: .cache)))").tag(CandidateCategory.cache)
+                    Text("要確認 \(Formatting.bytes(state.total(of: .review)))").tag(CandidateCategory.review)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                CandidateList(state: state, category: category)
+            }
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 10) {
+            if case .scanning = state.scanStatus {
+                ProgressView()
+                Text("キャッシュを探しています…")
+                    .foregroundStyle(.secondary)
+            } else {
+                Image(nsImage: CharacterRenderer.image(for: .one, height: 48))
+                    .renderingMode(.template)
+                    .foregroundStyle(.secondary)
+                Text("すっきり！")
+                    .font(.title3)
+                Text("消せそうなキャッシュはありません")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - 下部
 
     private var footer: some View {
         HStack {
@@ -47,11 +126,18 @@ struct PopoverView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
-            Button("選択した 0 GB を削除") {}
+            // 削除は M2、隔離は M3
+            Button(category == .cache ? "選択した \(Formatting.bytes(state.selectedBytes(in: category))) を削除"
+                                      : "選択した \(Formatting.bytes(state.selectedBytes(in: category))) を隔離") {}
                 .disabled(true)
             Menu {
+                Button("再スキャン", action: rescan)
+                    .disabled(state.scanStatus != .idle)
                 Button("設定…") {}
                     .disabled(true)
+                #if DEBUG
+                Toggle("デバッグ画面", isOn: $showsDebug)
+                #endif
                 Divider()
                 Button("Puffdisk を終了") { NSApp.terminate(nil) }
             } label: {
@@ -63,6 +149,20 @@ struct PopoverView: View {
             .accessibilityLabel("メニュー")
         }
         .padding(12)
+    }
+}
+
+/// 表示の書式。画面は日本語だけなので、システムの言語設定によらず日本語で出す
+enum Formatting {
+    static let locale = Locale(identifier: "ja_JP")
+    static let estimateNote = "空く見込みの量です。APFS のクローンやスナップショットがあると、実際に空く量は少なくなることがあります"
+
+    static func bytes(_ bytes: Int64) -> String {
+        bytes.formatted(.byteCount(style: .file, spellsOutZero: false).locale(locale))
+    }
+
+    static func relative(_ date: Date) -> String {
+        date.formatted(.relative(presentation: .named, unitsStyle: .abbreviated).locale(locale))
     }
 }
 
@@ -79,14 +179,10 @@ private struct DiskUsageBar: View {
         if let usage {
             VStack(alignment: .leading, spacing: 2) {
                 ProgressView(value: Double(usage.used), total: Double(usage.total))
-                Text("使用 \(format(usage.used)) / \(format(usage.total))")
+                Text("使用 \(Formatting.bytes(usage.used)) / \(Formatting.bytes(usage.total))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
-    }
-
-    private func format(_ bytes: Int64) -> String {
-        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 }

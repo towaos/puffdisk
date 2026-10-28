@@ -18,21 +18,9 @@ struct CacheCatalogTests {
     @Test(arguments: CacheCatalog.protectedPaths)
     func protectedPathsAreNotCovered(protected: String) {
         // 触らないものが、カタログの場所と同じか、その中か、それを含む場所になっていないこと
-        let protectedComponents = protected.split(separator: "/").map(String.init)
         for path in CacheCatalog.entries.flatMap(\.paths) {
-            let components = path.split(separator: "/").map(String.init)
-            #expect(!Self.isWithin(protectedComponents, components), "\(protected) は \(path) の中にある")
-            #expect(!Self.isWithin(components, protectedComponents), "\(path) は \(protected) の中にある")
-        }
-    }
-
-    /// `path` が `base`（`*` を含みうる）と同じか、その中にあるか
-    static func isWithin(_ path: [String], _ base: [String]) -> Bool {
-        guard path.count >= base.count else { return false }
-        return zip(path, base).allSatisfy { name, pattern in
-            guard pattern.contains("*") else { return name == pattern }
-            let parts = pattern.split(separator: "*", omittingEmptySubsequences: false)
-            return name.hasPrefix(String(parts[0])) && name.hasSuffix(String(parts.last!))
+            #expect(!ExclusionPolicy.isWithin(protected, path), "\(protected) は \(path) の中にある")
+            #expect(!ExclusionPolicy.isWithin(path, protected), "\(path) は \(protected) の中にある")
         }
     }
 

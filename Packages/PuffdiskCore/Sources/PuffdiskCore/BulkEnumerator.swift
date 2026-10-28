@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 
 /// フォルダ以下の集計結果（DESIGN.md 9.3）
-public struct TreeStats: Equatable, Sendable {
+public struct TreeStats: Codable, Equatable, Sendable {
     public var files = 0
     public var directories = 0
     public var symlinks = 0

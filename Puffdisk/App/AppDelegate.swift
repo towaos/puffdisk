@@ -4,8 +4,12 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let state = AppState()
     private var statusItemController: StatusItemController?
+    private var scanCoordinator: ScanCoordinator?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        statusItemController = StatusItemController(state: state)
+        let scanCoordinator = ScanCoordinator(state: state, cache: SizeCacheStore())
+        self.scanCoordinator = scanCoordinator
+        statusItemController = StatusItemController(state: state) { scanCoordinator.scan(userInitiated: true) }
+        scanCoordinator.start()
     }
 }

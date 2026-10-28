@@ -5,6 +5,7 @@ import PuffdiskCore
 
 let usage = """
 使い方: puffdisk-spikes <コマンド>
+  scan                            M1  候補一覧（アプリと同じ判定）
   catalog                         S3  カタログの各場所の有無とサイズ、場所を変える環境変数
   bench <フォルダ>...              S5  getattrlistbulk と FileManager の列挙の速さ
   fsevents watch <フォルダ> [秒]     S4  変化を表示し、最後のイベントIDを出す
@@ -44,6 +45,7 @@ extension Duration {
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 switch arguments.first {
+case "scan": ScanCommand.run()
 case "catalog": CatalogSpike.run()
 case "bench": BenchSpike.run(paths: Array(arguments.dropFirst()))
 case "fsevents": FSEventsSpike.run(arguments: Array(arguments.dropFirst()))

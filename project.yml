@@ -24,6 +24,7 @@ targets:
       path: Puffdisk/Info.plist
       properties:
         CFBundleDisplayName: Puffdisk
+        CFBundleDevelopmentRegion: ja
         CFBundleShortVersionString: "0.0.1"
         CFBundleVersion: "1"
         LSMinimumSystemVersion: "$(MACOSX_DEPLOYMENT_TARGET)"

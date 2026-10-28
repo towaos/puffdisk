@@ -1,6 +1,6 @@
 # DESIGN.md — Puffdisk（ストレージで太るメニューバーキャラ × 安全クリーナー）
 
-- ステータス: 設計中（v0.8）
+- ステータス: 設計中（v0.9）
 - 最終更新: 2026-10-28
 
 ### 変更履歴
@@ -15,6 +15,7 @@
 | v0.6 | 配布を Homebrew cask に決定。アプリ内の更新機能（Sparkle）をやめ、ネットワークを一切使わない方針に戻した。`zap` で隔離フォルダも片付けられるようにした |
 | v0.7 | アプリ名を Puffdisk に決定し、内部ID（Bundle ID・保存フォルダ名・cask 名）を確定。無料・オープンソースに決定 |
 | v0.8 | M0 検証スパイクの結果を反映（`docs/spikes/M0.md`）。ツールの設定ファイルからキャッシュの場所を読む、DerivedData の共有キャッシュ、「〜ごと」の単位はフォルダだけ、`getattrlistbulk` と `.noindex` の採用 |
+| v0.9 | M1 の実装で分かったことを反映。読む設定ファイルの一覧と、設定で指定された場所の検証。DerivedData のプロジェクトと共有キャッシュは**フォルダ名で見分ける**（`info.plist` がないプロジェクトがあった）。元プロジェクトが Desktop・Documents・Downloads にあるときは確かめない（許可ダイアログが出るため）。候補は場所ごと。日数で判定する「〜ごと」の単位は 1MB 以上。M1 のサイズキャッシュの使い方 |
 
 ---
 
@@ -231,9 +232,9 @@ macOS のメニューバーに常駐するキャラクターが、「消せそ�
 
 アプリに組み込んだ一覧にある場所だけを対象にする。パスは macOS での既定値で、M0 で実機確認する（S3）。
 
-**単位**: 「全体」はその場所をまとめて1つの候補にする。「〜ごと」はサブフォルダを1つずつ候補にする（直下のファイルは対象にしない。例: Hugging Face の `hub/version.txt`）。
+**単位**: 「全体」はその場所をまとめて1つの候補にする。場所が複数ある種類（Go の `go-build` と `pkg/mod` など）は、場所ごとに別の候補にする（サイズと場所が別々に分かるように）。「〜ごと」はサブフォルダを1つずつ候補にする（直下のファイルと `.` で始まるフォルダは対象にしない。例: Hugging Face の `hub/version.txt`・`hub/.locks`）。
 
-**候補にする条件**: 「全体」の単位は空く見込み量が **100MB 以上**のとき。「〜ごと」の単位は条件欄のとおり。
+**候補にする条件**: 「全体」の単位は空く見込み量が **100MB 以上**のとき。「〜ごと」の単位は条件欄のとおり。日数で判定する「〜ごと」の単位（DerivedData・DeviceSupport・JetBrains）も **1MB 未満は候補にしない**（M1 の実機で 20KB の DerivedData が並び、一覧が読みにくくなったため）。
 
 | 種類 | 場所 | 単位 | 条件 | カテゴリ | 既定のチェック | 表示する理由・注意 |
 |---|---|---|---|---|---|---|
@@ -255,35 +256,54 @@ macOS のメニューバーに常駐するキャラクターが、「消せそ�
 | Hugging Face | `~/.cache/huggingface/hub` | モデルごと（`models--*` 等） | 1GB 以上 | キャッシュ | ☐ | 再ダウンロードに時間がかかる |
 | PyTorch | `~/.cache/torch` | 全体 | 100MB 以上 | キャッシュ | ☐ | 同上 |
 | Xcode DerivedData | `~/Library/Developer/Xcode/DerivedData` | プロジェクトごと | 7.3 | キャッシュ | ☑ | 7.3 |
-| Xcode DeviceSupport | `~/Library/Developer/Xcode/*DeviceSupport` | OS バージョンごと | 更新から N 日（既定90日） | キャッシュ | ☑ | 実機を接続すると作り直される |
+| Xcode DeviceSupport | `~/Library/Developer/Xcode/*DeviceSupport` | OS バージョンごと | 更新から N 日（既定90日）かつ 1MB 以上 | キャッシュ | ☑ | 実機を接続すると作り直される |
 | Simulator キャッシュ | `~/Library/Developer/CoreSimulator/Caches` | 全体 | 100MB 以上 | キャッシュ | ☑ | 必要に応じて作り直される |
-| JetBrains | `~/Library/Caches/JetBrains` | 製品・バージョンごと | 更新から N 日（既定90日） | キャッシュ | ☑ | 古いバージョンの IDE のキャッシュ |
+| JetBrains | `~/Library/Caches/JetBrains` | 製品・バージョンごと | 更新から N 日（既定90日）かつ 1MB 以上 | キャッシュ | ☑ | 古いバージョンの IDE のキャッシュ |
 
 - 既定のチェックが ☐ のものも一覧には出し、スコアにも数える。再取得が重いものや取り直せないものを、まとめて選んだときに巻き込まないため。
 - 種類ごとに設定でオフにできる（オフにすると走査もしない）。
 - **ツール自身の設定ファイルで場所を変えている場合は、そのファイルを読んで場所を決める**（コマンドは実行しない。D13）。M0 では Go が `go env -w GOPATH=~/.go` で `~/Library/Application Support/go/env` に設定を保存しており、既定の場所を見ると 3.8GB を見落とした（S3）。
 
-  | ツール | 読む設定ファイル | 読む項目 |
-  |---|---|---|
-  | Go | `~/Library/Application Support/go/env` | `GOMODCACHE`、なければ `GOPATH` + `/pkg/mod`。`GOCACHE` |
-  | npm | `~/.npmrc` | `cache` |
+  | ツール | 読む設定ファイル | 読む項目 → 場所 | 目印 |
+  |---|---|---|---|
+  | npm | `~/.npmrc` | `cache` → `<値>/_cacache` | `content-v2`・`index-v5` |
+  | pnpm | `~/Library/Preferences/pnpm/rc`、`~/.npmrc` | `store-dir` | `v3`・`v10`・`v11` |
+  | Yarn | `~/.yarnrc.yml`（Berry）、`~/.yarnrc`（Classic） | `globalFolder` → `<値>/cache`、`cache-folder` | なし |
+  | Bun | `~/.bunfig.toml`、`~/.config/.bunfig.toml` | `[install.cache]` の `dir` | なし |
+  | pip | `~/Library/Application Support/pip/pip.conf`、`~/.config/pip/pip.conf`、`~/.pip/pip.conf` | `[global]` の `cache-dir` | `http-v2`・`http`・`wheels` |
+  | uv | `~/.config/uv/uv.toml` | `cache-dir` | `CACHEDIR.TAG` |
+  | Homebrew | `~/.homebrew/brew.env`、`~/.config/homebrew/brew.env`、`/etc/homebrew/brew.env` | `HOMEBREW_CACHE` | `api`・`downloads` |
+  | Maven | `~/.m2/settings.xml` | `<settings><localRepository>`（コメント内の例は読まない） | なし |
+  | Go | `~/Library/Application Support/go/env` | `GOMODCACHE`、`GOPATH`（先頭の1つ）+ `/pkg/mod`、`GOCACHE` | `cache`（`pkg/mod`）、`trim.txt`・`README`（`GOCACHE`） |
 
-  他のツールの設定ファイルは M1 で調べて足す。
+  Cargo（`CARGO_HOME`）・Gradle（`GRADLE_USER_HOME`）・CocoaPods・Playwright・Hugging Face・PyTorch は環境変数でしか変えられないので、設定ファイルからは読めない。
+- 設定ファイルの値は `~`、`$HOME`、`${HOME}`（Maven は `${user.home}`・`${env.HOME}`）だけを展開する。他の変数を含むもの、相対パス、`..` を含むものは使わない。
+- 設定ファイルで指定された場所は、既定の場所と同じ検証（7.5）に加えて次を確かめ、1つでも当たれば走査しない（理由はログに残す）。既定の場所に残っている古いキャッシュも、そのまま候補にする。
+  - ホームの中にある。ホームそのもの、ホーム直下の標準のフォルダ（`Documents`・`Library`・`.ssh` 等）、他のカタログの場所・触らないものを**含まない**（例: `store-dir=~` や `~/.cache` を指定された場合）
+  - Desktop・Documents・Downloads の中ではない（読むと許可ダイアログが出る）
+  - 自分自身と祖先（ホームより下）にプロジェクトや同期ツールの目印がない
+  - 目印のあるツールは、その場所の直下に目印がある
 - シェルの環境変数（`XDG_CACHE_HOME`、`HOMEBREW_CACHE` 等）だけで場所を変えている場合は、GUI アプリからは分からない。対応は未決（17章）。
 
 **カタログの場所の中でも触らないもの**: `~/.cargo/bin`、`~/.cargo/config*`、`~/.gradle/*.properties`、`~/Library/Developer/Xcode/Archives`（クラッシュ解析に使う dSYM を含む）、`~/Library/Developer/CoreSimulator/Devices`（シミュレーター内のアプリのデータ。外から消すと CoreSimulator の管理情報と食い違う）。カタログに載っているパスの外は一切扱わないので、これらは自然に対象外になるが、テストで明示的に確認する（14章）。
 
 ### 7.3 Xcode DerivedData
 
-各サブフォルダの `info.plist` の `WorkspacePath` を調べる。
+**プロジェクトと共有キャッシュの見分け方**: 名前が `<プロジェクト名>-<小文字28文字>` のサブフォルダはプロジェクトごとのフォルダ。それ以外（`ModuleCache.noindex`、`SymbolCache.noindex`、`SDKStatCaches.noindex`、`CompilationCache.noindex` 等）は Xcode が作り直す共有キャッシュで、まとめて1つの候補「Xcode 共有キャッシュ」とし、100MB 以上のとき候補にする（S3）。
+- v0.8 までは「`info.plist` がないもの = 共有キャッシュ」としていたが、M1 の実機で **`info.plist` のないプロジェクトのフォルダ**（`Pods-…`、`Runner-…`、`Unsaved_Xcode_Document-…`）が見つかったため、名前で見分けることにした。
+
+プロジェクトごとのフォルダは、`info.plist` の `WorkspacePath` を調べる。
 
 | `WorkspacePath` の状態 | 判定 | 表示する理由 |
 |---|---|---|
 | 存在しない（ENOENT） | 候補（日数に関係なく） | 元プロジェクトが存在しない |
-| 存在する、または権限がなく確認できない（EPERM 等） | 最終ビルド日（`Logs/Build` の更新日）が N 日（既定30日）以上前なら候補 | N 日間ビルドされていない。次回ビルドで作り直される |
+| 存在する | 最終ビルド日が N 日（既定30日）以上前なら候補 | N 日間ビルドされていない。次回ビルドで作り直される |
+| 確かめられない（権限がない、`info.plist` がない、下記の場所） | 同上 | 同上 ＋「元プロジェクトがあるか確認できない」 |
 
-- `info.plist` がないサブフォルダ（`ModuleCache.noindex`、`SymbolCache.noindex`、`SDKStatCaches.noindex`、`CompilationCache.noindex` 等）は、プロジェクトではなく Xcode が作り直す共有キャッシュ。まとめて1つの候補「Xcode 共有キャッシュ」とし、100MB 以上のとき候補にする（S3）。
-- サンドボックスがなくても、Desktop・Documents などは macOS のプライバシー保護（TCC）で読めないことがある。確認できないものを「存在しない」と表示してはいけない。
+- 最終ビルド日は `Logs/Build` の更新日。ないときはフォルダの中身の最新の更新日。
+- 7.5 の直近更新の除外（7日）は、元プロジェクトが存在しない場合にも適用する（移動した直後のプロジェクトを巻き込まないため）。
+- **元プロジェクトが Desktop・Documents・Downloads、`~/Library/Mobile Documents`・`~/Library/CloudStorage`、外付けディスク（`/Volumes`）にあるときは、存在を確かめず「確かめられない」として扱う**。サンドボックスがなくても、これらの場所は `stat` するだけで macOS の許可ダイアログ（TCC）が出るか、EPERM になる。スキャンのたびに説明なしで許可を求めるのは避ける。そのため Documents にプロジェクトを置いている人は「元プロジェクトが存在しない」の判定が使えず、日数だけで判定される（17章）。
+- 確認できないものを「存在しない」と表示してはいけない。
 
 ### 7.4 一般ファイルのルール（要確認）
 
@@ -453,6 +473,8 @@ macOS のメニューバーに常駐するキャラクターが、「消せそ�
 
 **キャッシュと差分スキャン**
 - フォルダごとに「合計サイズ・中身の最新の更新日・ファイル数」をキャッシュする。
+- スキャンは「単位の計画」（カタログの場所の検証、サブフォルダの一覧、DerivedData の `info.plist`。軽い）と「測定」（中身の列挙。重い）に分ける。計画は毎回行い、測定の結果だけをキャッシュする。
+- **M1 の時点**では、キャッシュは起動直後に前回の結果で一覧と段階を出すためだけに使い、そのあと全体を測り直す（1つ測るごとに一覧を差し替える。段階は測り終わってから計算し直す）。差分スキャンは M5。
 - FSEvents の最後のイベントIDを保存し、起動時はそのIDからの変化を受け取って、変化のあったフォルダのキャッシュだけ捨てる。
 - キャッシュの場所は頻繁に変わる（`npm install` 中など）ので、変化は「再集計が必要」とするだけにし、数十秒〜数分まとめてから数え直す。
 
@@ -495,7 +517,7 @@ App
 
 | 項目 | 内容 |
 |---|---|
-| path | 対象のパス |
+| paths | 対象のパス（ふつうは1つ。Xcode 共有キャッシュは複数のフォルダをまとめる） |
 | kind | ファイル / フォルダ |
 | source | カタログの種類（例: `npm`、`derivedData`）または一般ファイルのルール |
 | reclaimableSize | 空く見込み量（バイト。9.3） |
@@ -660,3 +682,4 @@ App
 - [ ] tap の名前（例: `towaos/tap`）と、公式 `homebrew/cask` へ申請する時期
 - [ ] 類似アプリの有無（公開前に要確認）
 - [ ] M0 検証スパイクの残り（S6 の「デスクトップと書類」・File Provider、S9）
+- [ ] Desktop・Documents に元プロジェクトがある DerivedData は「元プロジェクトが存在しない」を判定できない（7.3）。初回セットアップで Documents の許可を説明つきで求めるか、日数だけの判定のままにするか
