@@ -3,7 +3,7 @@ import Testing
 
 struct WeightCalculatorTests {
     let gb = WeightCalculator.gigabyte
-    let calculator = WeightCalculator()  // 満腹ライン 50GB
+    let calculator = WeightCalculator(fullLine: 50 * WeightCalculator.gigabyte)
 
     @Test func stagesAtEachBoundary() {
         #expect(calculator.stage(score: 0) == .one)
@@ -40,6 +40,10 @@ struct WeightCalculatorTests {
         #expect(small.stage(score: 1 * gb) == .two)
         #expect(small.stage(score: 10 * gb) == .five)
         #expect(small.lowerBound(of: .three) == 3 * gb)
+    }
+
+    @Test func defaultFullLineIsThirtyGigabytes() {
+        #expect(WeightCalculator().fullLine == 30 * gb)
     }
 
     @Test func fullLineIsClamped() {

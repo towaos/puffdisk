@@ -29,6 +29,8 @@ final class AppState {
     private(set) var score: Int64 = 0
     private(set) var stage: WeightStage = .one
     var settings = ScanSettings()
+    /// 段階5が続いているときのため息（DESIGN.md 5.3）。既定はオフ。設定画面は M5
+    var sighEnabled = false
 
     /// スキャンで見つかった候補。「残す」にしたものも含む
     private(set) var allCandidates: [Candidate] = []

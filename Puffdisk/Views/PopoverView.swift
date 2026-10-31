@@ -52,9 +52,12 @@ struct PopoverView: View {
 
     private var header: some View {
         HStack(alignment: .top, spacing: 14) {
-            Image(nsImage: CharacterRenderer.image(for: state.stage, height: 56))
+            Image(nsImage: CharacterRenderer.illustration(for: state.stage))
                 .renderingMode(.template)
-                .foregroundStyle(.primary)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .foregroundStyle(CharacterRenderer.illustrationColor)
                 .frame(width: 70, height: 56)
                 .accessibilityLabel("段階 \(state.stage.rawValue)")
             VStack(alignment: .leading, spacing: 6) {
@@ -118,9 +121,14 @@ struct PopoverView: View {
                 Text("キャッシュを探しています…")
                     .foregroundStyle(.secondary)
             } else {
-                Image(nsImage: CharacterRenderer.image(for: .one, height: 48))
+                Image(nsImage: CharacterRenderer.illustration(for: .one))
                     .renderingMode(.template)
-                    .foregroundStyle(.secondary)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .foregroundStyle(CharacterRenderer.illustrationColor)
+                    .frame(height: 72)
+                    .accessibilityHidden(true)
                 Text("すっきり！")
                     .font(.title3)
                 Text("消せそうなキャッシュはありません")

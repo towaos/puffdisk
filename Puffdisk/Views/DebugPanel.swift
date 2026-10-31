@@ -33,6 +33,11 @@ struct DebugPanel: View {
             )
             Toggle("削除の直後として扱う（ちらつき防止なし）", isOn: $treatAsUserAction)
                 .font(.caption)
+            Toggle("段階5でため息をつく（10秒ごと）", isOn: Binding(
+                get: { state.sighEnabled },
+                set: { state.sighEnabled = $0 }
+            ))
+            .font(.caption)
 
             LabeledContent("満腹ライン \(Int(fullLine / gb)) GB") {}
             Slider(

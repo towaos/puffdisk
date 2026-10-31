@@ -1,57 +1,43 @@
 import AppKit
 import PuffdiskCore
+import SwiftUI
 
-/// 仮キャラクターの描画（DESIGN.md 5.1）。M4 で本番の絵に差し替える
+/// キャラクターの絵（DESIGN.md 5.1）。絵は `Tools/make-character-assets.swift` で原画から作る
 enum CharacterRenderer {
     static let menuBarHeight: CGFloat = 18
 
     /// 段階1: 16pt → 段階5: 22pt
     static func menuBarWidth(for stage: WeightStage) -> CGFloat {
-        16 + CGFloat(stage.rawValue - 1) * 1.5
+        menuBarArt(for: stage).size.width
     }
 
-    /// 単色のテンプレート画像。`height` を変えるとポップオーバー用の大きな絵にも使える
-    static func image(for stage: WeightStage, height: CGFloat = menuBarHeight) -> NSImage {
-        let scale = height / menuBarHeight
-        let size = NSSize(width: menuBarWidth(for: stage) * scale, height: height)
-        let image = NSImage(size: size, flipped: false) { rect in
-            draw(stage: stage, in: rect)
+    /// メニューバー用の単色のテンプレート画像
+    static func menuBarImage(for stage: WeightStage) -> NSImage {
+        menuBarArt(for: stage)
+    }
+
+    /// アニメーションの1コマ。枠の幅はアニメーションの間そろえる
+    static func menuBarImage(for frame: CharacterFrame, canvasWidth: CGFloat) -> NSImage {
+        let art = menuBarArt(for: frame.stage)
+        let image = NSImage(size: NSSize(width: canvasWidth, height: menuBarHeight), flipped: false) { rect in
+            let size = NSSize(width: art.size.width * frame.scaleX, height: art.size.height * frame.scaleY)
+            NSGraphicsContext.current?.imageInterpolation = .high
+            art.draw(in: NSRect(x: rect.midX - size.width / 2, y: rect.minY, width: size.width, height: size.height))
             return true
         }
         image.isTemplate = true
         return image
     }
 
-    private static func draw(stage: WeightStage, in rect: NSRect) {
-        let unit = rect.height / menuBarHeight
-        let index = stage.rawValue - 1
-        let widthRatio: [CGFloat] = [0.72, 0.78, 0.84, 0.92, 1.0]
-        let heightRatio: [CGFloat] = [0.78, 0.76, 0.76, 0.78, 0.80]
+    /// ポップオーバー用の絵。メニューバーと同じく、体を塗りつぶして線を抜いた単色のテンプレート画像
+    static func illustration(for stage: WeightStage) -> NSImage {
+        NSImage(named: "Hamster\(stage.rawValue)")!
+    }
 
-        let bodyWidth = rect.width * widthRatio[index]
-        let bodyHeight = rect.height * heightRatio[index]
-        let body = NSRect(x: rect.midX - bodyWidth / 2, y: rect.minY + unit, width: bodyWidth, height: bodyHeight)
+    /// ポップオーバーの絵の色。`.primary` は半透明で、ダークでは体が灰色に見える
+    static let illustrationColor = Color(nsColor: .textColor)
 
-        NSColor.black.setFill()
-        NSBezierPath(roundedRect: body, xRadius: bodyWidth * 0.48, yRadius: bodyHeight * 0.55).fill()
-
-        // 目と汗は塗りを抜いて描く（テンプレート画像なので透明部分が背景色になる）
-        NSGraphicsContext.current?.compositingOperation = .clear
-        let eyeY = body.minY + bodyHeight * 0.52
-        let eyeGap = bodyWidth * 0.17
-        let eyeSize = 1.8 * unit
-        for x in [body.midX - eyeGap, body.midX + eyeGap] {
-            if stage >= .four {
-                // 苦しそうな横線の目
-                NSRect(x: x - eyeSize * 0.7, y: eyeY, width: eyeSize * 1.4, height: unit * 0.9).fill()
-            } else {
-                NSBezierPath(ovalIn: NSRect(x: x - eyeSize / 2, y: eyeY, width: eyeSize, height: eyeSize)).fill()
-            }
-        }
-        if stage == .five {
-            let drop = NSRect(x: body.maxX - 4.2 * unit, y: body.maxY - 6 * unit, width: 2 * unit, height: 3 * unit)
-            NSBezierPath(ovalIn: drop).fill()
-        }
-        NSGraphicsContext.current?.compositingOperation = .sourceOver
+    private static func menuBarArt(for stage: WeightStage) -> NSImage {
+        NSImage(named: "MenuBarHamster\(stage.rawValue)")!
     }
 }

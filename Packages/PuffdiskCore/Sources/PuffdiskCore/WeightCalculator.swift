@@ -15,7 +15,7 @@ public struct WeightCalculator: Equatable, Sendable {
     public static let hysteresisFactor = 0.9
 
     public static let gigabyte: Int64 = 1_000_000_000
-    public static let defaultFullLine: Int64 = 50 * gigabyte
+    public static let defaultFullLine: Int64 = 30 * gigabyte
     public static let fullLineRange: ClosedRange<Int64> = (5 * gigabyte)...(500 * gigabyte)
 
     /// 満腹ライン（バイト）。範囲外の値は範囲内に丸める

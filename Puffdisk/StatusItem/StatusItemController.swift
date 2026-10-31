@@ -2,15 +2,20 @@ import AppKit
 import Observation
 import SwiftUI
 
-/// アイコン表示・ポップオーバー開閉（DESIGN.md 9.4）。アニメーションは M4
+/// アイコン表示・アニメーション・ポップオーバー開閉（DESIGN.md 9.4）
 @MainActor
 final class StatusItemController: NSObject {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let popover = NSPopover()
     private let state: AppState
+    private let animator: CharacterAnimator
+    /// 最初の結果が出るまでは段階の変化を動かさない（起動のたびに膨らまないように）
+    private var hasResult = false
 
     init(state: AppState, actions: PopoverActions) {
         self.state = state
+        let statusItem = statusItem
+        animator = CharacterAnimator { statusItem.button?.image = $0 }
         super.init()
 
         popover.behavior = .transient
@@ -63,6 +68,9 @@ final class StatusItemController: NSObject {
         withObservationTracking {
             _ = state.stage
             _ = state.reclaimableBytes
+            _ = state.scanStatus
+            _ = state.lastScan
+            _ = state.sighEnabled
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.render()
@@ -73,7 +81,8 @@ final class StatusItemController: NSObject {
 
     private func render() {
         guard let button = statusItem.button else { return }
-        button.image = CharacterRenderer.image(for: state.stage)
+        animator.update(stage: state.stage, isScanning: state.scanStatus != .idle, sighs: state.sighEnabled, animated: hasResult)
+        hasResult = state.lastScan != nil
         // 読み上げはスコアではなく実際の合計（DESIGN.md 12）
         button.setAccessibilityLabel("Puffdisk 消せそうな量 \(Formatting.bytes(state.reclaimableBytes))")
     }
