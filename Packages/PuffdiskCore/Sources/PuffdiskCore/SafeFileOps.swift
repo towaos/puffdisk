@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 
 /// 移動・削除の唯一の入り口（DESIGN.md 11.2）。ファイルを動かす・消すコードはここ以外に書かない。
-/// M2 ではキャッシュの削除（Purge）だけを扱う。隔離・復元は M3
+/// 扱うのはキャッシュの削除（Purge）だけ
 public struct SafeFileOps: Sendable {
     public enum Failure: Error, Hashable, Sendable {
         /// 絶対パスでない、`.`・`..` を含む、正規化されていない
@@ -32,11 +32,13 @@ public struct SafeFileOps: Sendable {
     public let home: URL
     private let policy: ExclusionPolicy
     private let configuredLocations: [ConfiguredLocation]?
+    private let installedApps: [InstalledApp]?
 
-    public init(home: URL, configuredLocations: [ConfiguredLocation]? = nil) {
+    public init(home: URL, configuredLocations: [ConfiguredLocation]? = nil, installedApps: [InstalledApp]? = nil) {
         self.home = home.standardizedFileURL
         self.policy = ExclusionPolicy(home: home)
         self.configuredLocations = configuredLocations
+        self.installedApps = installedApps
     }
 
     /// `~/Library/Application Support/Puffdisk/`（DESIGN.md D15）
@@ -56,7 +58,7 @@ public struct SafeFileOps: Sendable {
         let parentComponents = Array(target.dropLast())
 
         // 1・2・3: カタログの場所（直前に検証し直したもの）の中で、そのものか直下
-        let allowed = Scanner(home: home, configuredLocations: configuredLocations).allowedLocations()
+        let allowed = Scanner(home: home, configuredLocations: configuredLocations, installedApps: installedApps).allowedLocations()
             .compactMap(policy.relativeComponents(of:))
         guard allowed.contains(where: { $0 == target || $0 == parentComponents }) else { throw .notAllowed }
         let location = allowed.contains(target) ? target : parentComponents

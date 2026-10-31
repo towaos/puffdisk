@@ -4,7 +4,7 @@ import Foundation
 /// 測る単位。1つの単位が1つの候補になりうる（DESIGN.md 7.2）
 public struct ScanUnit: Identifiable, Hashable, Sendable {
     public enum Kind: Hashable, Sendable {
-        /// カタログの「全体」の単位
+        /// カタログの「全体」の単位。「まとめて」の単位も、すべての場所を1つにしたこれになる
         case whole
         /// カタログの「〜ごと」の単位のサブフォルダ
         case child
@@ -14,15 +14,34 @@ public struct ScanUnit: Identifiable, Hashable, Sendable {
         case sharedXcodeCache
     }
 
-    public let entryID: String
+    /// カタログの項目。見つけたアプリの項目（7.8）はカタログにないので、ID ではなく項目そのものを持つ
+    public let entry: CacheCatalogEntry
     public let paths: [URL]
     public let kind: Kind
     /// 設定ファイルで指定された場所なら、その設定ファイル
     public let configFile: URL?
+    /// パス。複数の場所をまとめた単位は改行でつなぐ。「まとめて」の単位は、今ある場所が増減しても変わらないよう、
+    /// カタログに載っているすべての場所をつなぐ（「残す」とサイズのキャッシュの鍵になるため）
+    public let id: String
 
-    public var id: String { paths.map { $0.path(percentEncoded: false) }.joined(separator: "\n") }
+    public init(entry: CacheCatalogEntry, paths: [URL], kind: Kind, configFile: URL?, id: String? = nil) {
+        self.entry = entry
+        self.paths = paths
+        self.kind = kind
+        self.configFile = configFile
+        self.id = id ?? Self.id(of: paths)
+    }
 
-    public var entry: CacheCatalogEntry { CacheCatalog.entries.first { $0.id == entryID }! }
+    /// カタログの項目の単位
+    public init(entryID: String, paths: [URL], kind: Kind, configFile: URL?, id: String? = nil) {
+        self.init(entry: CacheCatalog.entries.first { $0.id == entryID }!, paths: paths, kind: kind, configFile: configFile, id: id)
+    }
+
+    public var entryID: String { entry.id }
+
+    static func id(of paths: [URL]) -> String {
+        paths.map { $0.path(percentEncoded: false) }.joined(separator: "\n")
+    }
 }
 
 /// DerivedData のプロジェクトごとのフォルダの情報（DESIGN.md 7.3）
@@ -64,17 +83,25 @@ public struct Scanner: Sendable {
     public var settings: ScanSettings
     private let policy: ExclusionPolicy
     private let configuredLocations: [ConfiguredLocation]
+    /// カタログと、見つけたアプリの項目（7.8）
+    public let entries: [CacheCatalogEntry]
 
-    public init(home: URL, settings: ScanSettings = ScanSettings(), configuredLocations: [ConfiguredLocation]? = nil) {
+    /// - Parameter installedApps: インストールされているアプリ。nil なら `/Applications` などから探す
+    public init(
+        home: URL, settings: ScanSettings = ScanSettings(), configuredLocations: [ConfiguredLocation]? = nil,
+        installedApps: [InstalledApp]? = nil
+    ) {
         self.home = home
         self.settings = settings
         self.policy = ExclusionPolicy(home: home)
         self.configuredLocations = configuredLocations ?? ToolConfig.configuredLocations(home: home)
+        self.entries = CacheCatalog.entries + AppDiscovery.entries(for: installedApps ?? AppDiscovery.installedApps(home: home))
     }
 
     public func plan() -> ScanPlan {
         var plan = ScanPlan()
-        for entry in CacheCatalog.entries where !settings.disabledEntries.contains(entry.id) {
+        for entry in entries where !settings.disabledEntries.contains(entry.id) {
+            var combined: [URL] = []
             for location in locations(of: entry) {
                 if let rejection = policy.check(location: location.url, markers: location.markers) {
                     // カタログの既定の場所がないのはふつうなので記録しない
@@ -85,25 +112,31 @@ public struct Scanner: Sendable {
                 }
                 switch entry.unit {
                 case .whole:
-                    plan.units.append(ScanUnit(entryID: entry.id, paths: [location.url], kind: .whole, configFile: location.configFile))
+                    plan.units.append(ScanUnit(entry: entry, paths: [location.url], kind: .whole, configFile: location.configFile))
                 case .perChild:
                     for child in childDirectories(of: location.url) {
-                        plan.units.append(ScanUnit(entryID: entry.id, paths: [child], kind: .child, configFile: location.configFile))
+                        plan.units.append(ScanUnit(entry: entry, paths: [child], kind: .child, configFile: location.configFile))
                     }
                 case .derivedData:
                     var shared: [URL] = []
                     for child in childDirectories(of: location.url) {
                         if let project = derivedDataProject(at: child) {
-                            plan.units.append(ScanUnit(entryID: entry.id, paths: [child], kind: .derivedDataProject(project),
+                            plan.units.append(ScanUnit(entry: entry, paths: [child], kind: .derivedDataProject(project),
                                                        configFile: location.configFile))
                         } else {
                             shared.append(child)
                         }
                     }
                     if !shared.isEmpty {
-                        plan.units.append(ScanUnit(entryID: entry.id, paths: shared, kind: .sharedXcodeCache, configFile: location.configFile))
+                        plan.units.append(ScanUnit(entry: entry, paths: shared, kind: .sharedXcodeCache, configFile: location.configFile))
                     }
+                case .combined:
+                    combined.append(location.url)
                 }
+            }
+            if !combined.isEmpty {
+                let declared = entry.paths.map { home.appending(path: $0, directoryHint: .isDirectory).standardizedFileURL }
+                plan.units.append(ScanUnit(entry: entry, paths: combined, kind: .whole, configFile: nil, id: ScanUnit.id(of: declared)))
             }
         }
         return plan
@@ -111,7 +144,7 @@ public struct Scanner: Sendable {
 
     /// カタログの場所のうち、今の時点で走査・削除してよいもの（オフにした種類も含む）。`SafeFileOps` が許可範囲に使う
     public func allowedLocations() -> [URL] {
-        CacheCatalog.entries.flatMap(locations(of:)).compactMap { location in
+        entries.flatMap(locations(of:)).compactMap { location in
             policy.check(location: location.url, markers: location.markers) == nil ? location.url : nil
         }
     }

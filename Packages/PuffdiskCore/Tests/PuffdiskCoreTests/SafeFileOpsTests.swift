@@ -7,7 +7,7 @@ struct SafeFileOpsTests {
     let fileManager = FileManager.default
 
     func ops(_ home: TestHome, configured: [ConfiguredLocation] = []) -> SafeFileOps {
-        SafeFileOps(home: home.url, configuredLocations: configured)
+        SafeFileOps(home: home.url, configuredLocations: configured, installedApps: [])
     }
 
     func exists(_ url: URL) -> Bool {

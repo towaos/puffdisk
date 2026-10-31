@@ -14,7 +14,6 @@ struct PopoverActions {
 struct PopoverView: View {
     let state: AppState
     let actions: PopoverActions
-    @State private var category = CandidateCategory.cache
     @State private var showsDebug = false
 
     var body: some View {
@@ -48,8 +47,6 @@ struct PopoverView: View {
             }
         }
     }
-
-    private var selectedCandidates: [Candidate] { state.selectedCandidates(in: category) }
 
     // MARK: - 上部
 
@@ -110,17 +107,7 @@ struct PopoverView: View {
         if state.candidates.isEmpty {
             emptyState
         } else {
-            VStack(spacing: 0) {
-                Picker("", selection: $category) {
-                    Text("キャッシュ \(Formatting.bytes(state.total(of: .cache)))").tag(CandidateCategory.cache)
-                    Text("要確認 \(Formatting.bytes(state.total(of: .review)))").tag(CandidateCategory.review)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                CandidateList(state: state, category: category, keep: actions.keep)
-            }
+            CandidateList(state: state, keep: actions.keep)
         }
     }
 
@@ -148,20 +135,10 @@ struct PopoverView: View {
 
     private var footer: some View {
         HStack {
-            Text("隔離中 0件")
-                .font(.caption)
-                .foregroundStyle(.secondary)
             Spacer()
-            let selectedBytes = Formatting.bytes(state.selectedBytes(in: category))
-            if category == .cache {
-                Button("選択した \(selectedBytes) を削除") { state.confirmingPurge = selectedCandidates }
-                    .disabled(selectedCandidates.isEmpty || state.scanStatus != .idle || state.purgeStatus == .moving)
-                    .help(state.scanStatus != .idle ? "スキャンが終わると削除できます" : "")
-            } else {
-                // 隔離は M3
-                Button("選択した \(selectedBytes) を隔離") {}
-                    .disabled(true)
-            }
+            Button("選択した \(Formatting.bytes(state.selectedBytes)) を削除") { state.confirmingPurge = state.selectedCandidates }
+                .disabled(state.selectedCandidates.isEmpty || state.scanStatus != .idle || state.purgeStatus == .moving)
+                .help(state.scanStatus != .idle ? "スキャンが終わると削除できます" : "")
             Menu {
                 Button("再スキャン", action: actions.rescan)
                     .disabled(state.scanStatus != .idle)

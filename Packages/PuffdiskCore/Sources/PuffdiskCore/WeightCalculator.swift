@@ -27,14 +27,9 @@ public struct WeightCalculator: Equatable, Sendable {
         self.fullLine = Self.clampFullLine(fullLine)
     }
 
-    /// スコア = キャッシュ ×1.0 + 要確認 ×0.5
-    public static func score(cacheBytes: Int64, reviewBytes: Int64) -> Int64 {
-        cacheBytes + reviewBytes / 2
-    }
-
     /// - Parameters:
     ///   - previous: 直前の段階。ちらつき防止に使う
-    ///   - smoothing: false にするとちらつき防止を使わない（削除・隔離の直後、設定の変更時）
+    ///   - smoothing: false にするとちらつき防止を使わない（削除の直後、設定の変更時）
     public func stage(score: Int64, previous: WeightStage? = nil, smoothing: Bool = true) -> WeightStage {
         let raw = stage(score: score, factor: 1.0)
         guard smoothing, let previous, raw < previous else { return raw }

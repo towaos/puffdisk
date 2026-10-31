@@ -116,4 +116,14 @@ struct ExclusionPolicyTests {
         #expect(policy.check(location: home.path("pnpm-store"), markers: ["v3", "v10"]) == nil)
         #expect(policy.check(location: home.path("not-a-store"), markers: ["v3", "v10"]) == .markerMissing)
     }
+
+    @Test func rejectsUnreadableLocations() throws {
+        let home = try TestHome()
+        defer { home.remove() }
+        let cache = try home.directory("Library/Application Support/App/Cache")
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: cache.path(percentEncoded: false))
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: cache.path(percentEncoded: false)) }
+
+        #expect(ExclusionPolicy(home: home.url).check(location: cache) == .unreadable)
+    }
 }

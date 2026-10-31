@@ -55,20 +55,6 @@ struct ToolConfigTests {
         #expect(result["homebrew"] == ["/Users/someone/brew-cache/"])
     }
 
-    @Test func mavenIgnoresCommentedExample() {
-        let commented = """
-        <settings>
-          <!-- localRepository
-           | Default: ${user.home}/.m2/repository
-          <localRepository>/path/to/local/repo</localRepository>
-          -->
-        </settings>
-        """
-        #expect(locations(["/Users/someone/.m2/settings.xml": commented])["maven"] == nil)
-        let real = "<settings><localRepository>${user.home}/m2repo</localRepository></settings>"
-        #expect(locations(["/Users/someone/.m2/settings.xml": real])["maven"] == ["/Users/someone/m2repo/"])
-    }
-
     @Test func goEnvUsesModCacheGoPathAndBuildCache() {
         let env = "GOPATH=/Users/someone/.go:/Users/someone/other\nGOCACHE=/Users/someone/.gocache\n"
         let result = locations(["/Users/someone/Library/Application Support/go/env": env])
@@ -85,7 +71,7 @@ struct ToolConfigTests {
     }
 
     @Test func expandsHomeForms() {
-        for raw in ["~/a", "$HOME/a", "${HOME}/a", "${user.home}/a", "${env.HOME}/a", "/Users/someone/./a/"] {
+        for raw in ["~/a", "$HOME/a", "${HOME}/a", "/Users/someone/./a/"] {
             #expect(ToolConfig.expandPath(raw, home: home)?.path(percentEncoded: false) == "/Users/someone/a/", "\(raw)")
         }
     }

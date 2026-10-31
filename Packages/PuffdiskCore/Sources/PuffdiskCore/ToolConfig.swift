@@ -24,8 +24,6 @@ struct ToolConfigSource: Sendable {
         case spaceSeparated(key: String)
         /// `KEY=VALUE`（`brew.env`、Go の `env`）
         case env(key: String)
-        /// `<settings><localRepository>`（Maven の `settings.xml`）
-        case mavenLocalRepository
     }
 
     let entryID: String
@@ -65,7 +63,6 @@ public enum ToolConfig {
               markers: ["api", "downloads"]),
         .init(entryID: "homebrew", file: "/etc/homebrew/brew.env", format: .env(key: "HOMEBREW_CACHE"),
               markers: ["api", "downloads"]),
-        .init(entryID: "maven", file: ".m2/settings.xml", format: .mavenLocalRepository),
         .init(entryID: "go", file: "Library/Application Support/go/env", format: .env(key: "GOMODCACHE"),
               markers: ["cache"]),
         .init(entryID: "go", file: "Library/Application Support/go/env", format: .env(key: "GOPATH"),
@@ -97,7 +94,7 @@ public enum ToolConfig {
 
     // MARK: - 値の展開
 
-    /// `~`、`$HOME`、`${HOME}`、`${user.home}`、`${env.HOME}` を展開する。
+    /// `~`、`$HOME`、`${HOME}` を展開する。
     /// 絶対パスにならないもの、他の変数を含むもの、`..` を含むものは nil
     static func expandPath(_ raw: String, home: URL, firstOfList: Bool = false) -> URL? {
         var value = raw.trimmingCharacters(in: .whitespaces)
@@ -110,7 +107,7 @@ public enum ToolConfig {
         } else if value.hasPrefix("~/") {
             value = homePath + value.dropFirst()
         }
-        for variable in ["${HOME}", "${user.home}", "${env.HOME}", "$HOME"] {
+        for variable in ["${HOME}", "$HOME"] {
             value = value.replacingOccurrences(of: variable, with: homePath)
         }
         guard value.hasPrefix("/"), !value.contains("$"), !value.contains("\0") else { return nil }
@@ -128,7 +125,6 @@ public enum ToolConfig {
         case let .yaml(key): yamlValue(contents, key: key)
         case let .spaceSeparated(key): spaceSeparatedValue(contents, key: key)
         case let .env(key): envValue(contents, key: key)
-        case .mavenLocalRepository: MavenSettingsParser.localRepository(in: contents)
         }
     }
 
@@ -223,40 +219,6 @@ extension ToolConfigSource.Format {
     var isGoPath: Bool {
         if case .env("GOPATH") = self { return true }
         return false
-    }
-}
-
-/// `settings.xml` の `<settings><localRepository>`。コメントの中の例は読まない
-private final class MavenSettingsParser: NSObject, XMLParserDelegate {
-    private var path: [String] = []
-    private var text = ""
-    private var result: String?
-
-    static func localRepository(in contents: String) -> String? {
-        guard let data = contents.data(using: .utf8) else { return nil }
-        let delegate = MavenSettingsParser()
-        let parser = XMLParser(data: data)
-        parser.shouldResolveExternalEntities = false
-        parser.delegate = delegate
-        guard parser.parse() else { return nil }
-        return delegate.result.flatMap { $0.isEmpty ? nil : $0 }
-    }
-
-    func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?,
-                qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
-        path.append(elementName)
-        text = ""
-    }
-
-    func parser(_ parser: XMLParser, foundCharacters string: String) {
-        text += string
-    }
-
-    func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
-        if path == ["settings", "localRepository"] {
-            result = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        path.removeLast()
     }
 }
 

@@ -46,7 +46,7 @@ struct ScannerTests {
     @Test func plansUnitsPerCatalogUnit() throws {
         let home = try makeHome()
         defer { home.remove() }
-        let plan = Scanner(home: home.url, configuredLocations: []).plan()
+        let plan = Scanner(home: home.url, configuredLocations: [], installedApps: []).plan()
 
         #expect(paths(plan, home).sorted() == [
             "~/.cache/huggingface/hub/models--org--model",
@@ -69,7 +69,7 @@ struct ScannerTests {
     @Test func protectedPathsNeverBecomeUnits() throws {
         let home = try makeHome()
         defer { home.remove() }
-        let plan = Scanner(home: home.url, configuredLocations: []).plan()
+        let plan = Scanner(home: home.url, configuredLocations: [], installedApps: []).plan()
 
         for unitPath in paths(plan, home) {
             for protected in CacheCatalog.protectedPaths {
@@ -82,7 +82,7 @@ struct ScannerTests {
     @Test func derivedDataWorkspaceStatus() throws {
         let home = try makeHome()
         defer { home.remove() }
-        let plan = Scanner(home: home.url, configuredLocations: []).plan()
+        let plan = Scanner(home: home.url, configuredLocations: [], installedApps: []).plan()
 
         func workspace(_ name: String) -> DerivedDataProject.Workspace? {
             for unit in plan.units {
@@ -113,7 +113,7 @@ struct ScannerTests {
             // 既定の場所と同じなら重ねない
             ConfiguredLocation(entryID: "npm", url: home.path(".npm/_cacache"), configFile: configFile, markers: []),
         ]
-        let plan = Scanner(home: home.url, configuredLocations: configured).plan()
+        let plan = Scanner(home: home.url, configuredLocations: configured, installedApps: []).plan()
 
         let go = try #require(plan.units.first { $0.entryID == "go" })
         #expect(go.configFile == configFile)
@@ -127,16 +127,48 @@ struct ScannerTests {
         defer { home.remove() }
         var settings = ScanSettings()
         settings.disabledEntries = ["npm", "derived-data"]
-        let plan = Scanner(home: home.url, settings: settings, configuredLocations: []).plan()
+        let plan = Scanner(home: home.url, settings: settings, configuredLocations: [], installedApps: []).plan()
 
         #expect(!plan.units.contains { $0.entryID == "npm" || $0.entryID == "derived-data" })
         #expect(plan.units.contains { $0.entryID == "gradle" })
     }
 
+    @Test func combinedEntriesBecomeOneUnitWithStableID() throws {
+        let home = try TestHome()
+        defer { home.remove() }
+        let slack = "Library/Application Support/Slack"
+        try home.file("\(slack)/Cache/Cache_Data/a", bytes: 4096)
+        try home.file("\(slack)/Local Storage/leveldb/b", bytes: 4096)
+
+        let before = try #require(Scanner(home: home.url, configuredLocations: [], installedApps: []).plan().units.first { $0.entryID == "slack" })
+        #expect(before.kind == .whole)
+        #expect(paths(ScanPlan(units: [before]), home) == ["~/\(slack)/Cache"])
+
+        // 場所が増えても ID は変わらない（「残す」とサイズのキャッシュの鍵）
+        try home.file("\(slack)/GPUCache/c", bytes: 4096)
+        try home.file("Library/Caches/com.tinyspeck.slackmacgap.ShipIt/update.x/d", bytes: 4096)
+        let after = try #require(Scanner(home: home.url, configuredLocations: [], installedApps: []).plan().units.first { $0.entryID == "slack" })
+        #expect(after.id == before.id)
+        #expect(paths(ScanPlan(units: [after]), home) == [
+            "~/\(slack)/Cache", "~/\(slack)/GPUCache", "~/Library/Caches/com.tinyspeck.slackmacgap.ShipIt",
+        ])
+    }
+
+    @Test func logsArePerFolder() throws {
+        let home = try TestHome()
+        defer { home.remove() }
+        try home.file("Library/Logs/Homebrew/x.log")
+        try home.file("Library/Logs/DiagnosticReports/a.ips")
+        try home.file("Library/Logs/fsck_hfs.log")
+
+        let plan = Scanner(home: home.url, configuredLocations: [], installedApps: []).plan()
+        #expect(paths(plan, home).sorted() == ["~/Library/Logs/DiagnosticReports", "~/Library/Logs/Homebrew"])
+    }
+
     @Test func measureAddsUpAllPaths() throws {
         let home = try makeHome()
         defer { home.remove() }
-        let plan = Scanner(home: home.url, configuredLocations: []).plan()
+        let plan = Scanner(home: home.url, configuredLocations: [], installedApps: []).plan()
         let shared = try #require(plan.units.first { $0.kind == .sharedXcodeCache })
 
         let stats = Scanner.measure(shared)

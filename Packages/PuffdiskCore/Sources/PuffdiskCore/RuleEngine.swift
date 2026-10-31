@@ -8,6 +8,8 @@ public struct ScanSettings: Equatable, Sendable {
     public var derivedDataDays = 30
     /// DeviceSupport・JetBrains の未更新日数（7.2）
     public var staleToolDataDays = 90
+    /// ログの未更新日数（7.2）
+    public var logDays = 30
     /// オフにしたカタログの種類（走査もしない）
     public var disabledEntries: Set<String> = []
 
@@ -63,11 +65,12 @@ public struct Candidate: Identifiable, Hashable, Sendable {
     public let detail: String
     public let paths: [URL]
     public let reclaimableBytes: Int64
-    public let category: CandidateCategory
     public let defaultSelected: Bool
     public let reasons: [CandidateReason]
     /// 判定に使った日付。「全体」の単位はなし
     public let lastUsed: LastUsed?
+    /// これを使うアプリの Bundle ID。どれかが起動中なら削除しない（7.7）。起動中かどうかはスキャンのあとも変わるので、候補には含めない
+    public let appBundleIDs: [String]
 
     public var id: String { unitID }
 }
@@ -103,10 +106,14 @@ public enum RuleEngine {
             title = childTitle(unit.paths[0], entryID: entry.id)
             if let modified = stats.latestModification { lastUsed = .init(date: modified, kind: .modified) }
             switch entry.ageRule {
-            case .staleToolData:
+            case let rule?:
                 guard let modified = stats.latestModification else { return nil }
                 let elapsed = days(from: modified, to: now)
-                guard elapsed >= settings.staleToolDataDays else { return nil }
+                let threshold = switch rule {
+                case .staleToolData: settings.staleToolDataDays
+                case .staleLogs: settings.logDays
+                }
+                guard elapsed >= threshold else { return nil }
                 reasons = [.notUpdated(days: elapsed), .refetchable(entry.reason)]
             case nil:
                 reasons = [.refetchable(entry.reason)]
@@ -146,8 +153,8 @@ public enum RuleEngine {
         }
         return Candidate(
             unitID: unit.id, entryID: entry.id, group: entry.group, title: title, detail: detail, paths: unit.paths,
-            reclaimableBytes: stats.reclaimableBytes, category: entry.category, defaultSelected: entry.selectedByDefault,
-            reasons: reasons, lastUsed: lastUsed
+            reclaimableBytes: stats.reclaimableBytes, defaultSelected: entry.selectedByDefault,
+            reasons: reasons, lastUsed: lastUsed, appBundleIDs: entry.appBundleIDs
         )
     }
 

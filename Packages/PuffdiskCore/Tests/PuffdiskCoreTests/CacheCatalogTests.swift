@@ -15,6 +15,22 @@ struct CacheCatalogTests {
         }
     }
 
+    @Test func combinedEntriesCanShareOnePurgeFolder() {
+        // 「まとめて」の単位は同じ Purge.noindex/<ID>/ に並べるので、最後の要素が重なってはいけない（APFS は大文字・小文字を区別しない）
+        for entry in CacheCatalog.entries where entry.unit == .combined {
+            let names = entry.paths.map { $0.split(separator: "/").last!.lowercased() }
+            #expect(Set(names).count == names.count, "\(entry.id)")
+            #expect(!entry.paths.contains { $0.contains("*") }, "\(entry.id)")
+        }
+    }
+
+    @Test func electronCachesLeaveAppDataAlone() {
+        let paths = CacheCatalog.electronCaches("App")
+        for data in ["Service Worker", "IndexedDB", "Local Storage", "Session Storage", "Cookies", "Preferences", "User"] {
+            #expect(!paths.contains("App/\(data)"), "\(data)")
+        }
+    }
+
     @Test(arguments: CacheCatalog.protectedPaths)
     func protectedPathsAreNotCovered(protected: String) {
         // 触らないものが、カタログの場所と同じか、その中か、それを含む場所になっていないこと

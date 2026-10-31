@@ -30,7 +30,7 @@ final class StatusItemController: NSObject {
         if let path = UserDefaults.standard.string(forKey: "SnapshotPopover") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 12) {
                 if UserDefaults.standard.bool(forKey: "SnapshotConfirmation") {
-                    state.confirmingPurge = state.selectedCandidates(in: .cache)
+                    state.confirmingPurge = state.selectedCandidates
                 }
                 DispatchQueue.main.async { self.snapshotPopover(to: URL(filePath: path)) }
             }

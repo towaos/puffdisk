@@ -7,8 +7,6 @@ final class KeepRule {
     enum Reason: String, Codable {
         /// 本人が指定した
         case user
-        /// 復元した（M3）
-        case restored
     }
 
     /// `Candidate.id`（パス。複数の場所をまとめた単位は改行でつなぐ）

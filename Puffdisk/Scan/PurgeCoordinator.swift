@@ -33,10 +33,12 @@ final class PurgeCoordinator {
         let home = home
         let settings = state.settings
         let kept = Set(state.keptItems.map(\.id))
+        // 通知を待たず、押した時点で取り直す（7.7）
+        let runningApps = Set(RunningAppsMonitor.current().keys)
 
         Task {
             let result = await Task.detached(priority: .userInitiated) {
-                Purger(home: home, settings: settings).moveToPurge(candidates, kept: kept)
+                Purger(home: home, settings: settings).moveToPurge(candidates, kept: kept, runningApps: runningApps)
             }.value
 
             for (candidate, reason) in result.skipped {

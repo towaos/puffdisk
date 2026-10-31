@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItemController: StatusItemController?
     private var scanCoordinator: ScanCoordinator?
     private var purgeCoordinator: PurgeCoordinator?
+    private var runningAppsMonitor: RunningAppsMonitor?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let persistence = Persistence()
@@ -20,6 +21,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keep: { purgeCoordinator.keep($0) },
             unkeep: { purgeCoordinator.unkeep($0) }
         ))
+        let runningAppsMonitor = RunningAppsMonitor(state: state)
+        self.runningAppsMonitor = runningAppsMonitor
+        runningAppsMonitor.start()
         purgeCoordinator.recover()
         scanCoordinator.start()
     }

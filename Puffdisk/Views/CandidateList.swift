@@ -5,13 +5,12 @@ import SwiftUI
 /// 候補一覧。種類ごとにまとめる（DESIGN.md 6.1）
 struct CandidateList: View {
     let state: AppState
-    let category: CandidateCategory
     let keep: (Candidate) -> Void
     @State private var collapsed: Set<String> = []
 
     private var groups: [(name: String, candidates: [Candidate])] {
         var result: [(name: String, candidates: [Candidate])] = []
-        for candidate in state.candidates where candidate.category == category {
+        for candidate in state.candidates {
             if let index = result.firstIndex(where: { $0.name == candidate.group }) {
                 result[index].candidates.append(candidate)
             } else {
@@ -24,7 +23,7 @@ struct CandidateList: View {
     var body: some View {
         let groups = groups
         if groups.isEmpty {
-            Text(category == .cache ? "消せそうなキャッシュはありません" : "要確認の候補はありません")
+            Text("消せそうなキャッシュはありません")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -35,7 +34,9 @@ struct CandidateList: View {
                         groupHeader(group.name, total: group.candidates.reduce(0) { $0 + $1.reclaimableBytes })
                         if !collapsed.contains(group.name) {
                             ForEach(group.candidates) { candidate in
-                                CandidateRow(candidate: candidate, isSelected: binding(for: candidate)) { keep(candidate) }
+                                let runningApp = state.runningApp(for: candidate)
+                                CandidateRow(candidate: candidate, runningApp: runningApp,
+                                             isSelected: binding(for: candidate, enabled: runningApp == nil)) { keep(candidate) }
                             }
                         }
                     }
@@ -71,9 +72,10 @@ struct CandidateList: View {
         .accessibilityValue(collapsed.contains(name) ? "閉じている" : "開いている")
     }
 
-    private func binding(for candidate: Candidate) -> Binding<Bool> {
+    /// - Parameter enabled: 偽ならチェックなしで表示する（チェックの状態は残し、アプリを終了したら戻す）
+    private func binding(for candidate: Candidate, enabled: Bool) -> Binding<Bool> {
         Binding(
-            get: { state.selection.contains(candidate.id) },
+            get: { enabled && state.selection.contains(candidate.id) },
             set: { isOn in
                 if isOn { state.selection.insert(candidate.id) } else { state.selection.remove(candidate.id) }
             }
@@ -83,6 +85,8 @@ struct CandidateList: View {
 
 private struct CandidateRow: View {
     let candidate: Candidate
+    /// 使うアプリが起動中なら、その名前。チェックできなくする（DESIGN.md 7.7）
+    let runningApp: String?
     @Binding var isSelected: Bool
     let keep: () -> Void
     @State private var isHovering = false
@@ -92,6 +96,7 @@ private struct CandidateRow: View {
             Toggle("", isOn: $isSelected)
                 .toggleStyle(.checkbox)
                 .labelsHidden()
+                .disabled(runningApp != nil)
                 .accessibilityLabel(candidate.title)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline) {
@@ -116,6 +121,12 @@ private struct CandidateRow: View {
                     Text(Formatting.bytes(candidate.reclaimableBytes))
                         .monospacedDigit()
                         .help(Formatting.estimateNote)
+                }
+                if let runningApp {
+                    Text("\(runningApp) が起動中。終了すると削除できる")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 ForEach(candidate.reasons, id: \.self) { reason in
                     Text(reason.text)

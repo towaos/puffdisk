@@ -15,10 +15,6 @@ struct WeightCalculatorTests {
         #expect(calculator.stage(score: 500 * gb) == .five)
     }
 
-    @Test func scoreCountsReviewAtHalf() {
-        #expect(WeightCalculator.score(cacheBytes: 10 * gb, reviewBytes: 4 * gb) == 12 * gb)
-    }
-
     @Test func goingUpUsesTheBoundary() {
         #expect(calculator.stage(score: 15 * gb, previous: .two) == .three)
         #expect(calculator.stage(score: 50 * gb, previous: .one) == .five)

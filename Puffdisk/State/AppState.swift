@@ -45,8 +45,8 @@ final class AppState {
     var selection: Set<String> = []
     /// 一度でも一覧に出た候補。再スキャンで既定のチェックに戻さないため
     private var seen: Set<String> = []
-
-    var spikeLog: [String] = []
+    /// 起動中のアプリ（Bundle ID → 名前）。候補の `appBundleIDs` と照らし合わせる（DESIGN.md 7.7）
+    private(set) var runningApps: [String: String] = [:]
 
     /// 一覧に出す候補（「残す」にしたものを除く）
     var candidates: [Candidate] {
@@ -54,20 +54,24 @@ final class AppState {
         return allCandidates.filter { !kept.contains($0.id) }
     }
 
-    /// 消せそうな量（空く見込み量の合計。スコアではない。DESIGN.md 6.1）
+    /// 消せそうな量（空く見込み量の合計。スコアと同じ値。DESIGN.md 5.2・6.1）
     var reclaimableBytes: Int64 { candidates.reduce(0) { $0 + $1.reclaimableBytes } }
 
-    func total(of category: CandidateCategory) -> Int64 {
-        candidates.filter { $0.category == category }.reduce(0) { $0 + $1.reclaimableBytes }
+    /// 起動中のアプリの候補は、チェックしたままでも含めない（終了すれば、チェックしたとおりに戻る）
+    var selectedCandidates: [Candidate] {
+        candidates.filter { selection.contains($0.id) && runningApp(for: $0) == nil }
     }
 
-    func selectedCandidates(in category: CandidateCategory) -> [Candidate] {
-        candidates.filter { $0.category == category && selection.contains($0.id) }
+    /// 候補を使うアプリが起動中なら、その名前
+    func runningApp(for candidate: Candidate) -> String? {
+        candidate.appBundleIDs.lazy.compactMap { self.runningApps[$0] }.first
     }
 
-    func selectedBytes(in category: CandidateCategory) -> Int64 {
-        selectedCandidates(in: category).reduce(0) { $0 + $1.reclaimableBytes }
+    func setRunningApps(_ apps: [String: String]) {
+        runningApps = apps
     }
+
+    var selectedBytes: Int64 { selectedCandidates.reduce(0) { $0 + $1.reclaimableBytes } }
 
     // MARK: - スキャン
 
@@ -116,12 +120,12 @@ final class AppState {
     }
 
     private func recalculateScore(userAction: Bool = false) {
-        updateScore(WeightCalculator.score(cacheBytes: total(of: .cache), reviewBytes: total(of: .review)), userAction: userAction)
+        updateScore(reclaimableBytes, userAction: userAction)
     }
 
     // MARK: - 段階
 
-    /// - Parameter userAction: 削除・隔離の直後として扱う（ちらつき防止を使わない）
+    /// - Parameter userAction: 削除の直後として扱う（ちらつき防止を使わない）
     func updateScore(_ newScore: Int64, userAction: Bool = false) {
         score = max(0, newScore)
         stage = calculator.stage(score: score, previous: stage, smoothing: !userAction)
@@ -130,10 +134,5 @@ final class AppState {
     func updateFullLine(_ fullLine: Int64) {
         calculator.fullLine = fullLine
         stage = calculator.stage(score: score, previous: stage, smoothing: false)
-    }
-
-    func appendSpikeLog(_ message: String) {
-        spikeLog.append(message)
-        SpikeLogFile.append(message)
     }
 }

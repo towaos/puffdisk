@@ -39,7 +39,6 @@ struct RuleEngineTests {
         let found = try #require(candidate(npm, stats(100 * mb, daysAgo: 0)))
         #expect(found.title == "npm")
         #expect(found.detail == "~/.npm/_cacache")
-        #expect(found.category == .cache)
         #expect(found.defaultSelected)
         #expect(found.reasons == [.refetchable("次回 install 時に必要な分だけ再取得")])
         #expect(found.lastUsed == nil)
@@ -47,12 +46,6 @@ struct RuleEngineTests {
 
     @Test func emptyUnitsAreNotCandidates() {
         #expect(candidate(unit("derived-data", "x", .sharedXcodeCache), stats(0)) == nil)
-    }
-
-    @Test func mavenIsReviewAndUnchecked() throws {
-        let found = try #require(candidate(unit("maven", ".m2/repository", .whole), stats(200 * mb)))
-        #expect(found.category == .review)
-        #expect(!found.defaultSelected)
     }
 
     @Test func huggingFaceModelsNeed1GBAndGetReadableTitles() throws {
@@ -76,6 +69,27 @@ struct RuleEngineTests {
         let found = try #require(candidate(jetbrains, stats(500 * mb, daysAgo: 120)))
         #expect(found.reasons.first == .notUpdated(days: 120))
         #expect(found.title == "IntelliJIdea2024.1")
+    }
+
+    @Test func logsNeed30Days() throws {
+        let logs = unit("logs", "Library/Logs/Homebrew", .child)
+        #expect(candidate(logs, stats(5 * mb, daysAgo: 29)) == nil)
+        #expect(candidate(unit("logs", "Library/Logs/Tiny", .child), stats(mb - 1, daysAgo: 60)) == nil)
+        let found = try #require(candidate(logs, stats(5 * mb, daysAgo: 45)))
+        #expect(found.reasons == [.notUpdated(days: 45), .refetchable("アプリの動作には使われない")])
+        #expect(found.defaultSelected)
+        #expect(found.appBundleIDs.isEmpty)
+    }
+
+    @Test func appCachesCarryBundleIDs() throws {
+        let slack = ScanUnit(entryID: "slack", paths: [
+            home.appending(path: "Library/Application Support/Slack/Cache"),
+            home.appending(path: "Library/Application Support/Slack/GPUCache"),
+        ], kind: .whole, configFile: nil)
+        let found = try #require(candidate(slack, stats(300 * mb, daysAgo: 0)))
+        #expect(found.title == "Slack")
+        #expect(found.detail == "~/Library/Application Support/Slack")
+        #expect(found.appBundleIDs == ["com.tinyspeck.slackmacgap"])
     }
 
     @Test func derivedDataMissingWorkspaceIgnoresBuildAge() throws {

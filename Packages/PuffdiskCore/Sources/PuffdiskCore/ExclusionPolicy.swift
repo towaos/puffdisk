@@ -17,6 +17,8 @@ public enum LocationRejection: Hashable, Sendable {
     case cloudSynced
     /// 設定ファイルで指定された場所に、そのツールの目印がない
     case markerMissing
+    /// `stat` はできるが中を読めない（EPERM・EACCES）。macOS がアプリのデータを保護している場合など（7.8）
+    case unreadable
 
     public var description: String {
         switch self {
@@ -30,12 +32,12 @@ public enum LocationRejection: Hashable, Sendable {
         case let .insideProject(path): "プロジェクトの中（\(path)）"
         case .cloudSynced: "クラウド同期の対象"
         case .markerMissing: "ツールのキャッシュの目印がない"
+        case .unreadable: "中を読めない（macOS の保護など）"
         }
     }
 }
 
-/// 触らないものの判定（DESIGN.md 7.5）。M1 ではカタログの場所の検証だけを行う。
-/// 一般ファイルの対象フォルダの検証（6.4）は M3
+/// 触らないものの判定（DESIGN.md 7.5）。カタログの場所の検証を行う
 public struct ExclusionPolicy: Sendable {
     /// プロジェクトの目印（7.5）
     public static let projectMarkers: Set<String> = [
@@ -94,6 +96,11 @@ public struct ExclusionPolicy: Sendable {
             if info.st_mode & S_IFMT == S_IFLNK { return .symbolicLinkInPath("~/" + displayRelative(current)) }
             guard info.st_mode & S_IFMT == S_IFDIR else { return .notFound }
         }
+
+        // 読めない場所は、測っても 0 になり、消そうとしても中を確かめられないので扱わない
+        let fd = open(location.path(percentEncoded: false), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        if fd < 0, errno == EPERM || errno == EACCES { return .unreadable }
+        if fd >= 0 { close(fd) }
 
         if volumeID(of: location) != volumeID(of: home) { return .differentVolume }
         if let values = try? location.resourceValues(forKeys: [.isUbiquitousItemKey]), values.isUbiquitousItem == true {

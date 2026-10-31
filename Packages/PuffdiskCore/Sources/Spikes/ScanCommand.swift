@@ -7,6 +7,13 @@ enum ScanCommand {
         let scanner = Scanner(home: home)
         let (plan, planTime) = measure { scanner.plan() }
         print("== 単位 \(plan.units.count) 件（\(planTime.milliseconds)）")
+        // カタログにないアプリで、目印から見つけたもの（DESIGN.md 7.8）
+        let discovered = scanner.entries.filter { $0.id.hasPrefix("app:") }
+        print("== 見つけたアプリ \(discovered.count) 件")
+        for entry in discovered {
+            let paths = plan.units.first { $0.entryID == entry.id }?.paths.map { RuleEngine.displayPath($0, home: home) } ?? []
+            print("- \(entry.name)（\(entry.appBundleIDs[0])）: \(paths.isEmpty ? "キャッシュなし" : paths.joined(separator: ", "))")
+        }
 
         var candidates: [Candidate] = []
         let (_, measureTime) = measure {
@@ -18,15 +25,12 @@ enum ScanCommand {
             }
         }
         print("== 候補 \(candidates.count) 件（測定 \(measureTime.milliseconds)）")
-        for category in [CandidateCategory.cache, .review] {
-            let inCategory = candidates.filter { $0.category == category }
-            let total = inCategory.reduce(0) { $0 + $1.reclaimableBytes }
-            print("\n[\(category == .cache ? "キャッシュ" : "要確認")] \(formatBytes(total))")
-            for candidate in inCategory.sorted(by: { ($0.group, -$0.reclaimableBytes) < ($1.group, -$1.reclaimableBytes) }) {
-                print("\(candidate.defaultSelected ? "☑" : "☐") [\(candidate.group)] \(candidate.title)  \(formatBytes(candidate.reclaimableBytes))  \(candidate.detail)")
-                for reason in candidate.reasons {
-                    print("     \(reason.text)")
-                }
+        let total = candidates.reduce(0) { $0 + $1.reclaimableBytes }
+        print("\n[キャッシュ] \(formatBytes(total))")
+        for candidate in candidates.sorted(by: { ($0.group, -$0.reclaimableBytes) < ($1.group, -$1.reclaimableBytes) }) {
+            print("\(candidate.defaultSelected ? "☑" : "☐") [\(candidate.group)] \(candidate.title)  \(formatBytes(candidate.reclaimableBytes))  \(candidate.detail)")
+            for reason in candidate.reasons {
+                print("     \(reason.text)")
             }
         }
 
